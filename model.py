@@ -37,7 +37,7 @@ def model(y0, t, k, sigma, mu, lam, bcrt, cdt):
 
     return dydt
 
-def solve_model(y0, t, k, sigma, mu, lam, bcr, cd40):
+def solve_model(y0, t, k, sigma, mu, lam, bcrt, cdt):
     """Solves the model in time given the set of parameters and inital values.
 
     Args:
@@ -47,13 +47,13 @@ def solve_model(y0, t, k, sigma, mu, lam, bcr, cd40):
         sigma (np.array[float]): maximum transcription rates
         mu (np.array[float]): basal production rates
         lam (np.array[float]): degradation rates
-        bcr (tuple[float]): triplet (peak, mu, sigma) for BCR bell curve signal with a certain peak value
-        cd40 (tuple[float]): pair (peak, mu, sigma) for CD40 bell curve signal with a certain peak value
+        bcrt ((float) -> (float)): time-dependent function for calculating bcr0(t)
+        cdt ((float) -> (float)): time-dependent function for calculating cd0(t)
 
     Returns:
         np.array[np.array[float]]: solutions to the model
     """    
-    return odeint(model, y0, t, args=(k, sigma, mu, lam, bcr, cd40))
+    return odeint(model, y0, t, args=(k, sigma, mu, lam, bcrt, cdt))
 
 def plot_model(ax, t, sol):
     """Plots the model solutions.
@@ -61,7 +61,7 @@ def plot_model(ax, t, sol):
     Args:
         ax (matplotlib.axes.Axes): Matplotlib's ax to plot the model to
         t (np.array[float]): time steps
-        sol (np.array[np.array[float]]): solutions returned by scipy.integrate.odeint
+        sol (np.array[np.array[float]]): solutions returned by solve_model
     """    
     ax.plot(t, sol[:, 0], 'blue', label='BLIMP1')
     ax.plot(t, sol[:, 1], 'green', label='BCL6')
@@ -92,9 +92,9 @@ def plot_singals(ax, t, sol, kb, bcrt, cdt):
     BCR = bcr0 * ((kb**2) / (kb**2 + b**2))
     CD40 = cd0 * ((kb**2) / (kb**2 + b**2))
 
-    ax.plot(t, bcr0, 'red', ls="--", label='bcr0')
+    ax.plot(t, bcr0, 'red', ls="--", label=r'bcr$_0$')
     ax.plot(t, BCR, 'red', label='BCR')
-    ax.plot(t, cd0, 'blue', ls="--", label='cd0')
+    ax.plot(t, cd0, 'blue', ls="--", label=r'cd$_0$')
     ax.plot(t, CD40, 'blue', label='CD40')
     
     ax.set_xlabel('t')
@@ -105,9 +105,31 @@ def plot_singals(ax, t, sol, kb, bcrt, cdt):
     ax.grid()
 
 def bell_curve_signal(t, strength, loc, scale):
+    """Generates a bell curve shaped signal.
+
+    Args:
+        t (np.array[float]): time steps
+        strength (float): signal value at the peak
+        loc (float): location parameter of normal distribution
+        scale (float): scale parameter of normal distribution
+
+    Returns:
+        np.array[float]: signal value at the given time steps
+    """    
     return norm.pdf(t, loc=loc, scale=scale) / norm.pdf(loc, loc=loc, scale=scale) * strength
 
-def heaviside_signal(t, strength, tstart, tend):
+def rectangle_signal(t, strength, tstart, tend):
+    """Generates a rectangle shaped signal.
+
+    Args:
+        t (np.array[float]): time steps
+        strength (float): signal value at the peak
+        tstart (float): time when the signal starts
+        tend (float): time when the signal end
+
+    Returns:
+        np.array[float]: signal value at the given time steps
+    """
     return (np.heaviside(t - tstart, 1) - np.heaviside(t - tend, 1)) * strength
 
 # Model parameters as given in table S1 of the Martinez paper
@@ -127,13 +149,14 @@ lam_p = 1
 lam_b = 1
 lam_r = 1
 
-bcrt = lambda t : heaviside_signal(t, strength=1.35, tstart=25, tend=55)
-cdt = lambda t : heaviside_signal(t, strength=0.75, tstart=40, tend=60)
-
 mu = np.array([mu_p, mu_b, mu_r])
 sigma = np.array([sigma_p, sigma_b, sigma_r])
 k = np.array([k_p, k_b, k_r])
 lam = np.array([lam_p, lam_b, lam_r])
+
+# bcr0(t) and cd0(t) functions: rectangle shape
+bcrt = lambda t : rectangle_signal(t, strength=1.35, tstart=25, tend=55)
+cdt = lambda t : rectangle_signal(t, strength=0.75, tstart=40, tend=60)
 
 # Time steps
 t = np.linspace(0, 100, 10000)
@@ -148,7 +171,18 @@ y0 = np.array([p0, b0, r0])
 # Solutions and plotting
 sol = solve_model(y0, t, k, sigma, mu, lam, bcrt, cdt)
 
-fig, ax = plt.subplots(1,2,figsize=(15,4))
-plot_model(ax[0], t, sol)
-plot_singals(ax[1], t, sol, k_b, bcrt, cdt)
+fig, ax = plt.subplots(2,2,figsize=(15,12))
+
+plot_model(ax[0,0], t, sol)
+plot_singals(ax[0,1], t, sol, k_b, bcrt, cdt)
+
+# bcr0(t) and cd0(t) functions: bell curve shape
+bcrt = lambda t : bell_curve_signal(t, strength=3.5, loc=40, scale=5.5)
+cdt = lambda t : bell_curve_signal(t, strength=1.25, loc=50, scale=4)
+
+sol = solve_model(y0, t, k, sigma, mu, lam, bcrt, cdt)
+
+plot_model(ax[1,0], t, sol)
+plot_singals(ax[1,1], t, sol, k_b, bcrt, cdt)
+
 plt.show()
