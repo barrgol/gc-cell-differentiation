@@ -3,31 +3,29 @@ import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 from scipy.stats import norm
 
-def model(y, t, k, sigma, mu, lam, bcr, cd40):
+def model(y0, t, k, sigma, mu, lam, bcrt, cdt):
     """Returns the system of ODEs corresponding to change of
     transcriptional activity in time [dpdt, dbdt, drdt].
 
     Args:
-        y (np.array[float]): initial factor values of p (BLIMP1), b (BCL6) and r (IRF4)
+        y0 (np.array[float]): initial factor values of p (BLIMP1), b (BCL6) and r (IRF4)
         t (np.array[float]): time steps
         k (np.array[float]): dissociation constants 
         sigma (np.array[float]): maximum transcription rates
         mu (np.array[float]): basal production rates
         lam (np.array[float]): degradation rates
-        bcr (tuple[float]): triplet (peak, mu, sigma) for BCR bell curve signal with a certain peak value
-        cd40 (tuple[float]): pair (peak, mu, sigma) for CD40 bell curve signal with a certain peak value
+        bcrt ((float) -> (float)): time-dependent function for calculating bcr0(t)
+        cdt ((float) -> (float)): time-dependent function for calculating cd0(t)
     """
 
-    p, b, r = y
+    p, b, r = y0
     kp, kb, kr = k
     sp, sb, sr = sigma
     mp, mb, mr = mu
     lp, lb, lr = lam
-    bcr_peak, bcr_mu, bcr_sigma = bcr
-    cd40_peak, cd40_mu, cd40_sigma = cd40
 
-    bcr0 = norm.pdf(t, loc=bcr_mu, scale=bcr_sigma) / norm.pdf(bcr_mu, loc=bcr_mu, scale=bcr_sigma) * bcr_peak
-    cd0 = norm.pdf(t, loc=cd40_mu, scale=cd40_sigma) / norm.pdf(cd40_mu, loc=cd40_mu, scale=cd40_sigma) * cd40_peak
+    bcr0 = bcrt(t)
+    cd0 = cdt(t)
 
     BCR = bcr0 * ((kb**2) / (kb**2 + b**2))
     CD40 = cd0 * ((kb**2) / (kb**2 + b**2))
@@ -70,10 +68,13 @@ def plot_model(ax, t, sol):
     ax.plot(t, sol[:, 2], 'red', label='IRF4')
     
     ax.set_xlabel('t')
+    ax.set_ylabel(r"Expression level $[C_{0}=10^{-8}]$M")
+    ax.set_title("Model evolution in time")
+
     ax.legend(loc='best')
     ax.grid()
 
-def plot_singals(ax, t, sol, kb, bcr, cd40):
+def plot_singals(ax, t, sol, kb, bcrt, cdt):
     """Plots the CD40 and BCR signals over time, corresponding to model solutions.
 
     Args:
@@ -81,25 +82,33 @@ def plot_singals(ax, t, sol, kb, bcr, cd40):
         t (np.array[float]): time steps
         sol (np.array[np.array[float]]): =solutions returned by scipy.integrate.odeint
         kb (float): BCL6 dissociation constant used in solution
-        bcr0 (float): BCR signalling constant bcr0 used in solution
-        cd0 (float): CD40 signalling constant cd0 used in solution
+        bcrt ((float) -> (float)): time-dependent function for calculating bcr0(t)
+        cdt ((float) -> (float)): time-dependent function for calculating cd0(t)
     """
-    bcr_peak, bcr_mu, bcr_sigma = bcr
-    cd40_peak, cd40_mu, cd40_sigma = cd40
-
-    bcr0 =  norm.pdf(t, loc=bcr_mu, scale=bcr_sigma) / norm.pdf(bcr_mu, loc=bcr_mu, scale=bcr_sigma) * bcr_peak
-    cd0 = norm.pdf(t, loc=cd40_mu, scale=cd40_sigma) / norm.pdf(cd40_mu, loc=cd40_mu, scale=cd40_sigma) * cd40_peak
+    bcr0 = bcrt(t)
+    cd0 = cdt(t)
 
     b = sol[:, 1]
     BCR = bcr0 * ((kb**2) / (kb**2 + b**2))
     CD40 = cd0 * ((kb**2) / (kb**2 + b**2))
 
+    ax.plot(t, bcr0, 'red', ls="--", label='bcr0')
     ax.plot(t, BCR, 'red', label='BCR')
+    ax.plot(t, cd0, 'blue', ls="--", label='cd0')
     ax.plot(t, CD40, 'blue', label='CD40')
     
     ax.set_xlabel('t')
+    ax.set_ylabel(r"Signal strength")
+    ax.set_title("Signal evolution in time")
+
     ax.legend(loc='best')
     ax.grid()
+
+def bell_curve_signal(t, strength, loc, scale):
+    return norm.pdf(t, loc=loc, scale=scale) / norm.pdf(loc, loc=loc, scale=scale) * strength
+
+def heaviside_signal(t, strength, tstart, tend):
+    return (np.heaviside(t - tstart, 1) - np.heaviside(t - tend, 1)) * strength
 
 # Model parameters as given in table S1 of the Martinez paper
 mu_p = 1e-6
@@ -118,8 +127,8 @@ lam_p = 1
 lam_b = 1
 lam_r = 1
 
-bcr = (3, 40, 2.5)
-cd40 = (1, 50, 1)
+bcrt = lambda t : heaviside_signal(t, strength=1.35, tstart=25, tend=55)
+cdt = lambda t : heaviside_signal(t, strength=0.75, tstart=40, tend=60)
 
 mu = np.array([mu_p, mu_b, mu_r])
 sigma = np.array([sigma_p, sigma_b, sigma_r])
@@ -137,9 +146,9 @@ r0 = 0.0  # IRF4
 y0 = np.array([p0, b0, r0])
 
 # Solutions and plotting
-sol = solve_model(y0, t, k, sigma, mu, lam, bcr, cd40)
+sol = solve_model(y0, t, k, sigma, mu, lam, bcrt, cdt)
 
 fig, ax = plt.subplots(1,2,figsize=(15,4))
 plot_model(ax[0], t, sol)
-plot_singals(ax[1], t, sol, k_b, bcr, cd40)
+plot_singals(ax[1], t, sol, k_b, bcrt, cdt)
 plt.show()
