@@ -18,11 +18,11 @@ def model(y0, t, k, sigma, mu, lam, bcrt, cdt):
         cdt ((float) -> (float)): time-dependent function for calculating cd0(t)
     """
 
-    p, b, r = y0
-    kp, kb, kr = k
-    sp, sb, sr = sigma
-    mp, mb, mr = mu
-    lp, lb, lr = lam
+    p, b, r, x = y0
+    kp, kb, kr, kx = k
+    sp, sb, sr, sx = sigma
+    mp, mb, mr, mx = mu
+    lp, lb, lr, lx = lam
 
     bcr0 = bcrt(t)
     cd0 = cdt(t)
@@ -30,10 +30,12 @@ def model(y0, t, k, sigma, mu, lam, bcrt, cdt):
     BCR = bcr0 * ((kb**2) / (kb**2 + b**2))
     CD40 = cd0 * ((kb**2) / (kb**2 + b**2))
 
-    dpdt = mp + sp * ((kb**2) / (kb**2 + b**2)) + sp * ((r**2) / (kr**2 + r**2)) - (lp * p)
+    dpdt = mp + sp * ((kb**2) / (kb**2 + b**2)) * ((kx**2) / (kx**2 + x**2)) + sp * ((r**2) / (kr**2 + r**2)) - (lp * p)
     dbdt = mb + sb * ((kp**2) / (kp**2 + p**2)) * ((kb**2) / (kb**2 + b**2)) * ((kr**2) / (kr**2 + r**2)) - (lb + BCR) * b
     drdt = mr + sr * ((r**2) / (kr**2 + r**2)) + CD40 - (lr * r)
-    dydt = [dpdt, dbdt, drdt]
+    dxdt = mx + sx * ((kp**2) / (kp**2 + p**2)) - (lx * x)
+
+    dydt = [dpdt, dbdt, drdt, dxdt]
 
     return dydt
 
@@ -66,6 +68,7 @@ def plot_model(ax, t, sol):
     ax.plot(t, sol[:, 0], 'blue', label='BLIMP1', lw=2.0)
     ax.plot(t, sol[:, 1], 'green', label='BCL6', lw=2.0)
     ax.plot(t, sol[:, 2], 'red', label='IRF4', lw=2.0)
+    ax.plot(t, sol[:, 3], 'cyan', label='PAX5', lw=2.0)
     
     ax.set_xlabel('t')
     ax.set_ylabel(r"Expression level $[C_{0}=10^{-8}]$M")
