@@ -1,4 +1,6 @@
 *.md
 *.pdf
 
+code/
+
 __pycache__
